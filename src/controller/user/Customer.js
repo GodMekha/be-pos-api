@@ -115,7 +115,7 @@ export default class CustomerController {
             if (!checkId) return resError(res, 404, EMessage.NotFound);
 
             const data = await prisma.customer.update({
-                where: { id },
+                where: {  id },
                 data: {
                     fullname,
                     phone: parseInt(phone),

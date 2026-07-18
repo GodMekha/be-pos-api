@@ -151,7 +151,7 @@ export default class AuthController {
             return resSuccess(res, SMessage.updated)
         } catch (error) {
             console.error("Forgot Controller Error:", error);
-            return SendError(res, 500, EMessage.ErrorServer, error.message)
+            return resError(res, 500, EMessage.ErrorServer, error.message)
         }
     }
     static async UpdateUser(req, res) {
@@ -173,7 +173,7 @@ export default class AuthController {
             return resSuccess(res, SMessage.updated,update);
         } catch (error) {
             console.error("Update user Controller Error:", error);
-            return SendError(res, 500, EMessage.ErrorServer, error.message)
+            return resError(res, 500, EMessage.ErrorServer, error.message)
         }
     }
     static async ChangePassword(req, res) {
@@ -214,7 +214,7 @@ export default class AuthController {
             return resSuccess(res, SMessage.Delete, data);
         } catch (error) {
             console.error("Delete Controller Error:", error);
-            return SendError(res, 500, EMessage.ErrorServer, error.message)
+            return resError(res, 500, EMessage.ErrorServer, error.message)
         }
     }
 }

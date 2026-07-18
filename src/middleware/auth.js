@@ -7,7 +7,7 @@ export const auth = async (req, res, next) => {
     try {
         const authorization = req.headers.authorization;
         if (!authorization) {
-            return SendError(res, 401, EMessage.Uauthorization)
+            return resError(res, 401, EMessage.Uauthorization)
         }
        
         const token = authorization.replace("Bearer ", "");

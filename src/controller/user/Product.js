@@ -158,7 +158,7 @@ export default class ProductController {
             return resSuccess(res, SMessage.updated, data);
         } catch (error) {
             console.error("Update product Controller Error:", error);
-            return resError(res, 500, EMessage.ErrorServer, error.message); // ✅ ແກ້: SendError => resError
+            return resError(res, 500, EMessage.ErrorServer, error.message); // ✅ ແກ້: resError => resError
         }
     }
 
@@ -176,7 +176,7 @@ export default class ProductController {
             return resSuccess(res, SMessage.deleted, data);
         } catch (error) {
             console.error("Delete product Controller Error:", error);
-            return resError(res, 500, EMessage.ErrorServer, error.message); // ✅ ແກ້: SendError => resError
+            return resError(res, 500, EMessage.ErrorServer, error.message); // ✅ ແກ້: resError => resError
         }
     }
 }
