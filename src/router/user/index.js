@@ -42,9 +42,9 @@ router.delete("/customer/delete/:id", auth, CustomerController.Delete)
 router.get("/history/inventory/getall", auth, HistoryInInventoryController.getAll);
 router.get("/history/inventory/getone/:history_id", auth, HistoryInInventoryController.getOne);
 router.post("/history/inventory/insert", auth, HistoryInInventoryController.Insert);
-router.put("/history/inventory/update/:history_id", auth, HistoryInInventoryController.Update);
-router.put("/history/inventory/update/active/:history_id", auth, HistoryInInventoryController.UpdateActive);
-router.delete("/history/inventory/delete/:history_id", auth, HistoryInInventoryController.Delete)
+router.put("/history/inventory/update/:id", auth, HistoryInInventoryController.Update);
+router.put("/history/inventory/update/active/:id", auth, HistoryInInventoryController.UpdateActive);
+router.delete("/history/inventory/delete/:id", auth, HistoryInInventoryController.Delete)
 //---- history in product ---
 router.get("/history/product/getall", auth, HistoryInProductController.getAll);
 router.get("/history/product/getone/:hip_id", auth, HistoryInProductController.getOne);
@@ -135,5 +135,5 @@ router.get("/supply/getOne/:supply_id", auth , SupplyController.getOne);
 router.post("/supply/insert", auth , SupplyController.Insert);
 router.put("/supply/update/:supply_id", auth , SupplyController.Update);
 router.put("/supply/update/active/:supply_id", auth , SupplyController.UpdateActive);
-router.delete("/supply/delete", auth, SupplyController.Delete);
+router.delete("/supply/delete/:supply_id", auth, SupplyController.Delete);
 export default router;

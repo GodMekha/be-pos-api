@@ -155,11 +155,9 @@ export default class CustomerController {
 
             const checkId = await prisma.customer.findFirst({ where: { id } });
             if (!checkId) return resError(res, 404, EMessage.NotFound);
-
             const data = await prisma.customer.delete({
                 where: { id },
             });
-
             return resSuccess(res, SMessage.deleted, data);
         } catch (error) {
             console.error("Delete Customer Controller Error:", error);
