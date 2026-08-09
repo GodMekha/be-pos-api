@@ -15,6 +15,7 @@ import PurchaseController from "../../controller/user/Purchase.js";
 import PurchaseDetailController from "../../controller/user/PurchaseDetail.js";
 import SellDetailController from "../../controller/user/SellDetail.js";
 import SupplyController from "../../controller/user/Supply.js";
+import OrderDetailController from "../../controller/user/OrderDetail.js";
 
 const router = express.Router();
 //----- auth -----
@@ -68,14 +69,12 @@ router.put("/order/update/:order_id", auth, OrderController.Update);
 router.put("/order/update/status/:order_id", auth, OrderController.UpdateStatus);
 router.delete("/order/delete/:order_id", auth, OrderController.Delete)
 //---- order detail ---
-router.get("/order/detail/getall", auth, OrderController.getAll);
-router.get("/order/detail/getone/:order_id", auth, OrderController.getOne);
-router.get("/order/detail/getby", auth, OrderController.getByUser);
-router.get("/order/detail/status", auth, OrderController.getByStatus);
-router.post("/order/detail/insert", auth, OrderController.Insert);
-router.put("/order/detail/update/:order_id", auth, OrderController.Update);
-router.put("/order/detail/update/status/:order_id", auth, OrderController.UpdateStatus);
-router.delete("/order/detail/delete/:order_id", auth, OrderController.Delete)
+router.get("/order/detail/getall", auth, OrderDetailController.getAll);
+router.get("/order/detail/getone/:order_id", auth, OrderDetailController.getOne);
+router.get("/order/detail/getby/:order_id", auth, OrderDetailController.getByOrder);
+router.post("/order/detail/insert", auth, OrderDetailController.Insert);
+router.put("/order/detail/update/:ordrd_id", auth, OrderDetailController.Update);
+router.delete("/order/detail/delete/:ordrd_id", auth, OrderDetailController.Delete)
 //---- package ---
 router.get("/package/getAll", auth, PackageController.getAll);
 router.get("/package/getOne/:id", auth, PackageController.getOne);
@@ -120,7 +119,7 @@ router.get("/sell/getOne/:id", auth , SellController.getOne);
 router.post("/sell/insert", auth , SellController.Insert);
 router.put("/sell/update/:id", auth , SellController.Update);
 router.put("/sell/update/status/:id", auth , SellController.UpdateStatus);
-router.delete("/sell/delete", auth, SellController.Delete);
+router.delete("/sell/delete/:id", auth, SellController.Delete);
 //--- sell details ---
 router.get("/sell/detail/getAll", auth, SellDetailController.getAll);
 router.get("/sell/detail/getBy/sell/detail/:id", auth , SellDetailController.getBySell);
@@ -128,7 +127,7 @@ router.get("/sell/detail/getBy/part/:id", auth , SellDetailController.getByPart)
 router.get("/sell/detail/getOne/:id", auth , SellDetailController.getOne);
 router.post("/sell/detail/insert", auth , SellDetailController.Insert);
 router.put("/sell/detail/update/:id", auth , SellDetailController.Update);
-router.delete("/sell/detail/delete", auth, SellDetailController.Delete);
+router.delete("/sell/detail/delete/:id", auth, SellDetailController.Delete);
 //--- supply ---
 router.get("/supply/getAll", auth, SupplyController.getAll);
 router.get("/supply/getOne/:supply_id", auth , SupplyController.getOne);
