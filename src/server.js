@@ -6,7 +6,11 @@ import fileUpload  from "express-fileupload";
 const app = express()
 const port = 3000 || 5000
 import "./config/db_mysql.js"
-app.use(cors());
+// app.use(cors());
+app.use(cors({
+  origin: "http://localhost:8000", // URL ຂອງ Frontend
+  credentials: true
+}));
 app.use(fileUpload());
 app.use(bodyParser.json({extended: true, parameterLimit: 5000, limit: "500mb"}))
 app.use(bodyParser.urlencoded({extended: true, parameterLimit: 5000, limit: "500mb"}))

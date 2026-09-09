@@ -1,0 +1,1451 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================
+// 1. ENUMS
+// ============================================================
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  LOCKED
+  SUSPENDED
+}
+
+enum ListingSecurityType {
+  EQUITY
+  BOND
+  ETF
+  FUND
+  OTHER
+}
+
+enum ApplicationStatus {
+  DRAFT
+  SUBMITTED
+  UNDER_REVIEW
+  RETURNED
+  APPROVED
+  REJECTED
+  WITHDRAWN
+}
+
+enum Currency {
+  LAK
+  USD
+  THB
+  CNY
+  OTHER
+}
+
+enum SecurityStatus {
+  DRAFT
+  ACTIVE
+  SUSPENDED
+  DELISTED
+  MATURED
+}
+
+enum MemberType {
+  BROKER
+  DEALER
+  MARKET_MAKER
+  CLEARING_MEMBER
+  CUSTODIAN
+}
+
+enum AccountStatus {
+  PENDING
+  ACTIVE
+  BLOCKED
+  CLOSED
+}
+
+enum InvestorType {
+  INDIVIDUAL
+  CORPORATE
+  INSTITUTIONAL
+  FOREIGN
+}
+
+enum OrderSide {
+  BUY
+  SELL
+}
+
+enum OrderType {
+  MARKET
+  LIMIT
+  STOP
+  STOP_LIMIT
+}
+
+enum TimeInForce {
+  DAY
+  GTC
+  IOC
+  FOK
+  GTD
+}
+
+enum OrderStatus {
+  PENDING
+  VALIDATING
+  ACCEPTED
+  PARTIALLY_FILLED
+  FILLED
+  AMENDED
+  CANCEL_PENDING
+  CANCELLED
+  REJECTED
+  EXPIRED
+}
+
+enum ExecutionStatus {
+  NEW
+  EXECUTED
+  CANCELLED
+}
+
+enum TradeStatus {
+  NEW
+  CAPTURED
+  CLEARED
+  SETTLEMENT_PENDING
+  SETTLED
+  FAILED
+  CANCELLED
+}
+
+enum SettlementStatus {
+  PENDING
+  PROCESSING
+  SETTLED
+  FAILED
+  CANCELLED
+}
+
+enum PostingStatus {
+  PENDING
+  POSTED
+  REVERSED
+  FAILED
+}
+
+enum PledgeStatus {
+  ACTIVE
+  RELEASED
+  CANCELLED
+}
+
+enum JournalStatus {
+  DRAFT
+  POSTED
+  REVERSED
+}
+
+enum CorporateActionStatus {
+  ANNOUNCED
+  OPEN
+  PROCESSED
+  PAID
+  CANCELLED
+}
+
+enum DisclosureStatus {
+  DRAFT
+  SUBMITTED
+  APPROVED
+  PUBLISHED
+  REJECTED
+  WITHDRAWN
+}
+
+enum AlertSeverity {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum AlertStatus {
+  OPEN
+  REVIEWING
+  ESCALATED
+  CLOSED
+  FALSE_POSITIVE
+}
+
+enum CaseStatus {
+  OPEN
+  INVESTIGATING
+  ESCALATED
+  CLOSED
+}
+
+// ============================================================
+// 2. IAM / USERS
+// ============================================================
+
+model User {
+  id           BigInt     @id @default(autoincrement())
+  username     String     @unique @db.VarChar(100)
+  email        String?    @unique @db.VarChar(255)
+  phone        String?    @db.VarChar(50)
+  passwordHash String?    @map("password_hash") @db.Text
+  userType     String     @map("user_type") @db.VarChar(50)
+  status       UserStatus @default(ACTIVE)
+  lastLoginAt  DateTime?  @map("last_login_at") @db.DateTime(6)
+  createdAt    DateTime   @default(now()) @map("created_at") @db.DateTime(6)
+  updatedAt    DateTime   @default(now()) @updatedAt @map("updated_at") @db.DateTime(6)
+
+  // Relations
+  userRoles                  UserRole[]
+  createdApplications        ListingApplication[]       @relation("CreatedApplications")
+  approvedApplications       ListingApplication[]       @relation("ApprovedApplications")
+  applicationReviews         ApplicationReview[]
+  changedApplicationStatuses ApplicationStatusHistory[]
+  createdDocuments           Document[]                 @relation("CreatedDocuments")
+  uploadedDocumentVersions   DocumentVersion[]
+  createdSecurityVersions    SecurityVersion[]
+  memberUsers                MemberUser[]
+  verifiedInvestorKycs       InvestorKyc[]
+  createdOrderAmendments     OrderAmendment[]
+  journalEntriesCreated      JournalEntry[]             @relation("JournalEntriesCreated")
+  disclosuresCreated         Disclosure[]
+  assignedSurveillanceCases  SurveillanceCase[]
+  caseActions                CaseAction[]
+  auditLogs                  AuditLog[]
+
+  @@map("users")
+}
+
+model Role {
+  id          BigInt  @id @default(autoincrement())
+  code        String  @unique @db.VarChar(100)
+  name        String  @db.VarChar(150)
+  description String? @db.Text
+
+  userRoles       UserRole[]
+  rolePermissions RolePermission[]
+
+  @@map("roles")
+}
+
+model Permission {
+  id          BigInt  @id @default(autoincrement())
+  code        String  @unique @db.VarChar(150)
+  name        String  @db.VarChar(200)
+  description String? @db.Text
+
+  rolePermissions RolePermission[]
+
+  @@map("permissions")
+}
+
+model UserRole {
+  userId BigInt @map("user_id")
+  roleId BigInt @map("role_id")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@id([userId, roleId])
+  @@map("user_roles")
+}
+
+model RolePermission {
+  roleId       BigInt @map("role_id")
+  permissionId BigInt @map("permission_id")
+
+  role       Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+  @@map("role_permissions")
+}
+
+// ============================================================
+// 3. ISSUER / LISTING
+// ============================================================
+
+model Issuer {
+  id             BigInt   @id @default(autoincrement())
+  legalName      String   @map("legal_name") @db.VarChar(300)
+  shortName      String?  @map("short_name") @db.VarChar(150)
+  registrationNo String?  @unique @map("registration_no") @db.VarChar(100)
+  businessType   String?  @map("business_type") @db.VarChar(150)
+  country        String?  @db.VarChar(100)
+  address        String?  @db.Text
+  contactEmail   String?  @map("contact_email") @db.VarChar(255)
+  phone          String?  @db.VarChar(50)
+  status         String   @default("ACTIVE") @db.VarChar(50)
+  createdAt      DateTime @default(now()) @map("created_at") @db.DateTime(6)
+  updatedAt      DateTime @default(now()) @updatedAt @map("updated_at") @db.DateTime(6)
+
+  applications ListingApplication[]
+  securities   Security[]
+  disclosures  Disclosure[]
+
+  @@map("issuers")
+}
+
+model ListingApplication {
+  id            BigInt              @id @default(autoincrement())
+  applicationNo String              @unique @map("application_no") @db.VarChar(100)
+  issuerId      BigInt              @map("issuer_id")
+  securityType  ListingSecurityType @map("security_type")
+  boardType     String?             @map("board_type") @db.VarChar(100)
+  status        ApplicationStatus   @default(DRAFT)
+  submittedAt   DateTime?           @map("submitted_at") @db.DateTime(6)
+  approvedAt    DateTime?           @map("approved_at") @db.DateTime(6)
+  rejectedAt    DateTime?           @map("rejected_at") @db.DateTime(6)
+  createdBy     BigInt?             @map("created_by")
+  approvedBy    BigInt?             @map("approved_by")
+  createdAt     DateTime            @default(now()) @map("created_at") @db.DateTime(6)
+  updatedAt     DateTime            @default(now()) @updatedAt @map("updated_at") @db.DateTime(6)
+
+  issuer               Issuer                     @relation(fields: [issuerId], references: [id])
+  creator              User?                      @relation("CreatedApplications", fields: [createdBy], references: [id])
+  approver             User?                      @relation("ApprovedApplications", fields: [approvedBy], references: [id])
+  reviews              ApplicationReview[]
+  statusHistories      ApplicationStatusHistory[]
+  applicationDocuments ApplicationDocument[]
+
+  @@map("listing_applications")
+}
+
+model ApplicationReview {
+  id            BigInt   @id @default(autoincrement())
+  applicationId BigInt   @map("application_id")
+  reviewerId    BigInt   @map("reviewer_id")
+  reviewStage   String   @map("review_stage") @db.VarChar(100)
+  status        String   @db.VarChar(50)
+  comment       String?  @db.Text
+  reviewedAt    DateTime @default(now()) @map("reviewed_at") @db.DateTime(6)
+
+  application ListingApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  reviewer    User               @relation(fields: [reviewerId], references: [id])
+
+  @@map("application_reviews")
+}
+
+model ApplicationStatusHistory {
+  id            BigInt             @id @default(autoincrement())
+  applicationId BigInt             @map("application_id")
+  fromStatus    ApplicationStatus? @map("from_status")
+  toStatus      ApplicationStatus  @map("to_status")
+  changedBy     BigInt?            @map("changed_by")
+  reason        String?            @db.Text
+  createdAt     DateTime           @default(now()) @map("created_at") @db.DateTime(6)
+
+  application ListingApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  user        User?              @relation(fields: [changedBy], references: [id])
+
+  @@map("application_status_history")
+}
+
+model Document {
+  id           BigInt   @id @default(autoincrement())
+  documentType String   @map("document_type") @db.VarChar(100)
+  fileName     String   @map("file_name") @db.VarChar(500)
+  storageKey   String   @map("storage_key") @db.Text
+  mimeType     String?  @map("mime_type") @db.VarChar(150)
+  fileSize     BigInt?  @map("file_size")
+  checksum     String?  @db.VarChar(255)
+  createdBy    BigInt?  @map("created_by")
+  createdAt    DateTime @default(now()) @map("created_at") @db.DateTime(6)
+
+  creator              User?                 @relation("CreatedDocuments", fields: [createdBy], references: [id])
+  versions             DocumentVersion[]
+  applicationDocuments ApplicationDocument[]
+  disclosureDocuments  DisclosureDocument[]
+
+  @@map("documents")
+}
+
+model DocumentVersion {
+  id         BigInt   @id @default(autoincrement())
+  documentId BigInt   @map("document_id")
+  versionNo  Int      @map("version_no")
+  storageKey String   @map("storage_key") @db.Text
+  checksum   String?  @db.VarChar(255)
+  uploadedBy BigInt?  @map("uploaded_by")
+  uploadedAt DateTime @default(now()) @map("uploaded_at") @db.DateTime(6)
+
+  document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  uploader User?    @relation(fields: [uploadedBy], references: [id])
+
+  @@unique([documentId, versionNo])
+  @@map("document_versions")
+}
+
+model ApplicationDocument {
+  applicationId BigInt @map("application_id")
+  documentId    BigInt @map("document_id")
+
+  application ListingApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  document    Document           @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@id([applicationId, documentId])
+  @@map("application_documents")
+}
+
+// ============================================================
+// 4. SECURITY MASTER
+// ============================================================
+
+model Board {
+  id          BigInt  @id @default(autoincrement())
+  code        String  @unique @db.VarChar(50)
+  name        String  @db.VarChar(150)
+  description String? @db.Text
+
+  securityBoards  SecurityBoard[]
+  tradingSessions TradingSession[]
+
+  @@map("boards")
+}
+
+model Security {
+  id                  BigInt              @id @default(autoincrement())
+  issuerId            BigInt              @map("issuer_id")
+  securityType        ListingSecurityType @map("security_type")
+  name                String              @db.VarChar(300)
+  ticker              String              @unique @db.VarChar(50)
+  isin                String?             @unique @db.VarChar(50)
+  cusip               String?             @db.VarChar(50)
+  currency            Currency            @default(LAK)
+  faceValue           Decimal?            @map("face_value") @db.Decimal(30, 10)
+  issueSize           Decimal?            @map("issue_size") @db.Decimal(30, 10)
+  outstandingQuantity Decimal             @default(0) @map("outstanding_quantity") @db.Decimal(30, 10)
+  listedQuantity      Decimal             @default(0) @map("listed_quantity") @db.Decimal(30, 10)
+  status              SecurityStatus      @default(DRAFT)
+  listingDate         DateTime?           @map("listing_date") @db.Date
+  tradingStartDate    DateTime?           @map("trading_start_date") @db.Date
+  tradingEndDate      DateTime?           @map("trading_end_date") @db.Date
+  createdAt           DateTime            @default(now()) @map("created_at") @db.DateTime(6)
+  updatedAt           DateTime            @default(now()) @updatedAt @map("updated_at") @db.DateTime(6)
+
+  issuer                 Issuer                  @relation(fields: [issuerId], references: [id])
+  versions               SecurityVersion[]
+  securityBoards         SecurityBoard[]
+  tradingRules           TradingRule[]
+  bondDetail             BondDetail?
+  tradingHalts           TradingHalt[]
+  orders                 Order[]
+  orderBooks             OrderBook[]
+  executions             Execution[]
+  trades                 Trade[]
+  marketTicks            MarketTick[]
+  marketOhlcvs           MarketOhlcv[]
+  orderBookSnapshots     OrderBookSnapshot[]
+  settlementObligations  SettlementObligation[]
+  securitiesHoldings     SecuritiesHolding[]
+  securitiesTransactions SecuritiesTransaction[]
+  securityTransfers      SecurityTransfer[]
+  pledges                Pledge[]
+  corporateActions       CorporateAction[]
+  dividends              Dividend[]
+  indexConstituents      IndexConstituent[]
+  foreignLimits          ForeignLimit[]
+  foreignPositions       ForeignPosition[]
+  disclosures            Disclosure[]
+  surveillanceAlerts     SurveillanceAlert[]
+
+  @@map("securities")
+}
+
+model SecurityVersion {
+  id            BigInt    @id @default(autoincrement())
+  securityId    BigInt    @map("security_id")
+  versionNo     Int       @map("version_no")
+  data          Json
+  effectiveFrom DateTime  @map("effective_from") @db.DateTime(6)
+  effectiveTo   DateTime? @map("effective_to") @db.DateTime(6)
+  createdBy     BigInt?   @map("created_by")
+  createdAt     DateTime  @default(now()) @map("created_at") @db.DateTime(6)
+
+  security Security @relation(fields: [securityId], references: [id], onDelete: Cascade)
+  creator  User?    @relation(fields: [createdBy], references: [id])
+
+  @@unique([securityId, versionNo])
+  @@map("security_versions")
+}
+
+model SecurityBoard {
+  securityId    BigInt    @map("security_id")
+  boardId       BigInt    @map("board_id")
+  effectiveFrom DateTime  @map("effective_from") @db.DateTime(6)
+  effectiveTo   DateTime? @map("effective_to") @db.DateTime(6)
+
+  security Security @relation(fields: [securityId], references: [id], onDelete: Cascade)
+  board    Board    @relation(fields: [boardId], references: [id])
+
+  @@id([securityId, boardId, effectiveFrom])
+  @@map("security_boards")
+}
+
+model TradingRule {
+  id             BigInt    @id @default(autoincrement())
+  securityId     BigInt    @map("security_id")
+  referencePrice Decimal?  @map("reference_price") @db.Decimal(30, 10)
+  priceCeiling   Decimal?  @map("price_ceiling") @db.Decimal(30, 10)
+  priceFloor     Decimal?  @map("price_floor") @db.Decimal(30, 10)
+  boardLot       Decimal   @default(1) @map("board_lot") @db.Decimal(30, 10)
+  tickSize       Decimal   @map("tick_size") @db.Decimal(30, 10)
+  tradingMethod  String    @map("trading_method") @db.VarChar(50)
+  effectiveFrom  DateTime  @map("effective_from") @db.DateTime(6)
+  effectiveTo    DateTime? @map("effective_to") @db.DateTime(6)
+
+  security Security @relation(fields: [securityId], references: [id], onDelete: Cascade)
+
+  @@map("trading_rules")
+}
+
+model BondDetail {
+  securityId         BigInt    @id @map("security_id")
+  couponRate         Decimal?  @map("coupon_rate") @db.Decimal(20, 10)
+  couponFrequency    String?   @map("coupon_frequency") @db.VarChar(50)
+  dayCountConvention String?   @map("day_count_convention") @db.VarChar(50)
+  issueDate          DateTime? @map("issue_date") @db.Date
+  maturityDate       DateTime? @map("maturity_date") @db.Date
+
+  security Security @relation(fields: [securityId], references: [id], onDelete: Cascade)
+
+  @@map("bond_details")
+}
+
+// ============================================================
+// 5. MEMBERS / BROKERS
+// ============================================================
+
+model Member {
+  id         BigInt     @id @default(autoincrement())
+  memberCode String     @unique @map("member_code") @db.VarChar(50)
+  name       String     @db.VarChar(300)
+  memberType MemberType @map("member_type")
+  licenseNo  String?    @unique @map("license_no") @db.VarChar(100)
+  status     String     @default("ACTIVE") @db.VarChar(50)
+  createdAt  DateTime   @default(now()) @map("created_at") @db.DateTime(6)
+  updatedAt  DateTime   @default(now()) @updatedAt @map("updated_at") @db.DateTime(6)
+
+  memberUsers     MemberUser[]
+  memberAccounts  MemberAccount[]
+  tradingAccounts TradingAccount[]
+  orders          Order[]
+
+  @@map("members")
+}
+
+model MemberUser {
+  memberId BigInt @map("member_id")
+  userId   BigInt @map("user_id")
+
+  member Member @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([memberId, userId])
+  @@map("member_users")
+}
+
+model MemberAccount {
+  id          BigInt        @id @default(autoincrement())
+  memberId    BigInt        @map("member_id")
+  accountNo   String        @unique @map("account_no") @db.VarChar(100)
+  accountType String        @map("account_type") @db.VarChar(100)
+  status      AccountStatus @default(ACTIVE)
+  createdAt   DateTime      @default(now()) @map("created_at") @db.DateTime(6)
+
+  member Member @relation(fields: [memberId], references: [id])
+
+  @@map("member_accounts")
+}
+
+// ============================================================
+// 6. INVESTORS / KYC / TRADING ACCOUNTS
+// ============================================================
+
+model Investor {
+  id           BigInt       @id @default(autoincrement())
+  investorType InvestorType @map("investor_type")
+  fullName     String?      @map("full_name") @db.VarChar(300)
+  legalName    String?      @map("legal_name") @db.VarChar(300)
+  nationality  String?      @db.VarChar(100)
+  country      String?      @db.VarChar(100)
+  dateOfBirth  DateTime?    @map("date_of_birth") @db.Date
+  taxId        String?      @map("tax_id") @db.VarChar(100)
+  status       String       @default("ACTIVE") @db.VarChar(50)
+  createdAt    DateTime     @default(now()) @map("created_at") @db.DateTime(6)
+  updatedAt    DateTime     @default(now()) @updatedAt @map("updated_at") @db.DateTime(6)
+
+  investorKyc     InvestorKyc?
+  tradingAccounts TradingAccount[]
+  foreignInvestor ForeignInvestor?
+
+  @@map("investors")
+}
+
+model InvestorKyc {
+  id                 BigInt    @id @default(autoincrement())
+  investorId         BigInt    @unique @map("investor_id")
+  kycLevel           String    @map("kyc_level") @db.VarChar(50)
+  riskLevel          String?   @map("risk_level") @db.VarChar(50)
+  verificationStatus String    @map("verification_status") @db.VarChar(50)
+  verifiedAt         DateTime? @map("verified_at") @db.DateTime(6)
+  verifiedBy         BigInt?   @map("verified_by")
+
+  investor Investor @relation(fields: [investorId], references: [id], onDelete: Cascade)
+  verifier User?    @relation(fields: [verifiedBy], references: [id])
+
+  @@map("investor_kyc")
+}
+
+model TradingAccount {
+  id          BigInt        @id @default(autoincrement())
+  investorId  BigInt        @map("investor_id")
+  memberId    BigInt        @map("member_id")
+  accountNo   String        @unique @map("account_no") @db.VarChar(100)
+  accountType String        @map("account_type") @db.VarChar(100)
+  status      AccountStatus @default(PENDING)
+  openedAt    DateTime      @default(now()) @map("opened_at") @db.DateTime(6)
+
+  investor              Investor               @relation(fields: [investorId], references: [id])
+  member                Member                 @relation(fields: [memberId], references: [id])
+  cashAccounts          CashAccount[]
+  securitiesAccounts    SecuritiesAccount[]
+  orders                Order[]
+  buyTrades             Trade[]                @relation("BuyTradingAccount")
+  sellTrades            Trade[]                @relation("SellTradingAccount")
+  settlementObligations SettlementObligation[]
+  surveillanceAlerts    SurveillanceAlert[]
+
+  @@map("trading_accounts")
+}
+
+model CashAccount {
+  id               BigInt        @id @default(autoincrement())
+  tradingAccountId BigInt        @map("trading_account_id")
+  currency         Currency
+  availableBalance Decimal       @default(0) @map("available_balance") @db.Decimal(30, 10)
+  blockedBalance   Decimal       @default(0) @map("blocked_balance") @db.Decimal(30, 10)
+  totalBalance     Decimal       @default(0) @map("total_balance") @db.Decimal(30, 10)
+  status           AccountStatus @default(ACTIVE)
+
+  tradingAccount TradingAccount @relation(fields: [tradingAccountId], references: [id], onDelete: Cascade)
+
+  @@unique([tradingAccountId, currency])
+  @@map("cash_accounts")
+}
+
+model SecuritiesAccount {
+  id               BigInt        @id @default(autoincrement())
+  tradingAccountId BigInt        @map("trading_account_id")
+  accountNo        String        @unique @map("account_no") @db.VarChar(100)
+  status           AccountStatus @default(ACTIVE)
+  openedAt         DateTime      @default(now()) @map("opened_at") @db.DateTime(6)
+
+  tradingAccount              TradingAccount               @relation(fields: [tradingAccountId], references: [id], onDelete: Cascade)
+  deliveryInstructions        SettlementInstruction[]      @relation("DeliverySecuritiesAccount")
+  receiveInstructions         SettlementInstruction[]      @relation("ReceiveSecuritiesAccount")
+  securitiesHoldings          SecuritiesHolding[]
+  securitiesTransactions      SecuritiesTransaction[]
+  transfersFrom               SecurityTransfer[]           @relation("FromSecuritiesAccount")
+  transfersTo                 SecurityTransfer[]           @relation("ToSecuritiesAccount")
+  pledges                     Pledge[]
+  corporateActionEntitlements CorporateActionEntitlement[]
+
+  @@map("securities_accounts")
+}
+
+// ============================================================
+// 7. TRADING SESSION
+// ============================================================
+
+model TradingSession {
+  id          BigInt    @id @default(autoincrement())
+  marketDate  DateTime  @map("market_date") @db.Date
+  boardId     BigInt    @map("board_id")
+  sessionType String    @map("session_type") @db.VarChar(50)
+  startTime   DateTime  @map("start_time") @db.DateTime(6)
+  endTime     DateTime? @map("end_time") @db.DateTime(6)
+  status      String    @default("OPEN") @db.VarChar(50)
+
+  board        Board         @relation(fields: [boardId], references: [id])
+  tradingHalts TradingHalt[]
+  orders       Order[]
+  orderBooks   OrderBook[]
+
+  @@unique([marketDate, boardId, sessionType])
+  @@map("trading_sessions")
+}
+
+model TradingHalt {
+  id         BigInt    @id @default(autoincrement())
+  securityId BigInt    @map("security_id")
+  sessionId  BigInt?   @map("session_id")
+  reason     String    @db.Text
+  startedAt  DateTime  @map("started_at") @db.DateTime(6)
+  endedAt    DateTime? @map("ended_at") @db.DateTime(6)
+
+  security Security        @relation(fields: [securityId], references: [id])
+  session  TradingSession? @relation(fields: [sessionId], references: [id])
+
+  @@map("trading_halts")
+}
+
+// ============================================================
+// 8. ORDER MANAGEMENT
+// ============================================================
+
+model Order {
+  id                BigInt      @id @default(autoincrement())
+  orderId           String      @unique @map("order_id") @db.VarChar(100)
+  clientOrderId     String?     @map("client_order_id") @db.VarChar(100)
+  tradingAccountId  BigInt      @map("trading_account_id")
+  memberId          BigInt      @map("member_id")
+  securityId        BigInt      @map("security_id")
+  sessionId         BigInt?     @map("session_id")
+  side              OrderSide
+  orderType         OrderType   @map("order_type")
+  timeInForce       TimeInForce @default(DAY) @map("time_in_force")
+  quantity          Decimal     @db.Decimal(30, 10)
+  price             Decimal?    @db.Decimal(30, 10)
+  stopPrice         Decimal?    @map("stop_price") @db.Decimal(30, 10)
+  displayQuantity   Decimal?    @map("display_quantity") @db.Decimal(30, 10)
+  remainingQuantity Decimal     @map("remaining_quantity") @db.Decimal(30, 10)
+  filledQuantity    Decimal     @default(0) @map("filled_quantity") @db.Decimal(30, 10)
+  status            OrderStatus @default(PENDING)
+  receivedAt        DateTime    @default(now()) @map("received_at") @db.DateTime(6)
+  acceptedAt        DateTime?   @map("accepted_at") @db.DateTime(6)
+  cancelledAt       DateTime?   @map("cancelled_at") @db.DateTime(6)
+  expiresAt         DateTime?   @map("expires_at") @db.DateTime(6)
+  createdAt         DateTime    @default(now()) @map("created_at") @db.DateTime(6)
+
+  tradingAccount  TradingAccount   @relation(fields: [tradingAccountId], references: [id])
+  member          Member           @relation(fields: [memberId], references: [id])
+  security        Security         @relation(fields: [securityId], references: [id])
+  session         TradingSession?  @relation(fields: [sessionId], references: [id])
+  orderEvents     OrderEvent[]
+  orderAmendments OrderAmendment[]
+  buyExecutions   Execution[]      @relation("BuyOrder")
+  sellExecutions  Execution[]      @relation("SellOrder")
+
+  @@index([securityId, status], map: "idx_orders_security_status")
+  @@index([tradingAccountId, createdAt], map: "idx_orders_account_created")
+  @@index([memberId, createdAt], map: "idx_orders_member_created")
+  @@index([memberId, clientOrderId], map: "idx_orders_client_order_id")
+  @@map("orders")
+}
+
+model OrderEvent {
+  id         BigInt       @id @default(autoincrement())
+  orderId    BigInt       @map("order_id")
+  eventType  String       @map("event_type") @db.VarChar(100)
+  oldStatus  OrderStatus? @map("old_status")
+  newStatus  OrderStatus? @map("new_status")
+  quantity   Decimal?     @db.Decimal(30, 10)
+  price      Decimal?     @db.Decimal(30, 10)
+  reason     String?      @db.Text
+  eventTime  DateTime     @default(now()) @map("event_time") @db.DateTime(6)
+  sequenceNo BigInt       @map("sequence_no")
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@unique([orderId, sequenceNo])
+  @@index([orderId, eventTime], map: "idx_order_events_order_time")
+  @@map("order_events")
+}
+
+model OrderAmendment {
+  id               BigInt   @id @default(autoincrement())
+  orderId          BigInt   @map("order_id")
+  originalQuantity Decimal? @map("original_quantity") @db.Decimal(30, 10)
+  newQuantity      Decimal? @map("new_quantity") @db.Decimal(30, 10)
+  originalPrice    Decimal? @map("original_price") @db.Decimal(30, 10)
+  newPrice         Decimal? @map("new_price") @db.Decimal(30, 10)
+  reason           String?  @db.Text
+  createdBy        BigInt?  @map("created_by")
+  createdAt        DateTime @default(now()) @map("created_at") @db.DateTime(6)
+
+  order   Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  creator User? @relation(fields: [createdBy], references: [id])
+
+  @@map("order_amendments")
+}
+
+// ============================================================
+// 9. MATCHING / EXECUTION / TRADES
+// ============================================================
+
+model OrderBook {
+  id               BigInt @id @default(autoincrement())
+  securityId       BigInt @map("security_id")
+  tradingSessionId BigInt @map("trading_session_id")
+  status           String @default("OPEN") @db.VarChar(50)
+
+  security Security       @relation(fields: [securityId], references: [id])
+  session  TradingSession @relation(fields: [tradingSessionId], references: [id])
+
+  @@unique([securityId, tradingSessionId])
+  @@map("order_books")
+}
+
+model Execution {
+  id            BigInt          @id @default(autoincrement())
+  executionId   String          @unique @map("execution_id") @db.VarChar(100)
+  buyOrderId    BigInt          @map("buy_order_id")
+  sellOrderId   BigInt          @map("sell_order_id")
+  securityId    BigInt          @map("security_id")
+  quantity      Decimal         @db.Decimal(30, 10)
+  price         Decimal         @db.Decimal(30, 10)
+  executedAt    DateTime        @default(now()) @map("executed_at") @db.DateTime(6)
+  matchSequence BigInt          @map("match_sequence")
+  status        ExecutionStatus @default(EXECUTED)
+
+  buyOrder  Order    @relation("BuyOrder", fields: [buyOrderId], references: [id])
+  sellOrder Order    @relation("SellOrder", fields: [sellOrderId], references: [id])
+  security  Security @relation(fields: [securityId], references: [id])
+  trade     Trade?
+
+  @@index([securityId, executedAt], map: "idx_executions_security_time")
+  @@map("executions")
+}
+
+model Trade {
+  id             BigInt      @id @default(autoincrement())
+  tradeId        String      @unique @map("trade_id") @db.VarChar(100)
+  executionId    BigInt      @unique @map("execution_id")
+  buyAccountId   BigInt      @map("buy_account_id")
+  sellAccountId  BigInt      @map("sell_account_id")
+  securityId     BigInt      @map("security_id")
+  quantity       Decimal     @db.Decimal(30, 10)
+  price          Decimal     @db.Decimal(30, 10)
+  grossAmount    Decimal     @map("gross_amount") @db.Decimal(30, 10)
+  tradeDate      DateTime    @map("trade_date") @db.Date
+  settlementDate DateTime?   @map("settlement_date") @db.Date
+  status         TradeStatus @default(NEW)
+  createdAt      DateTime    @default(now()) @map("created_at") @db.DateTime(6)
+
+  execution             Execution              @relation(fields: [executionId], references: [id])
+  buyAccount            TradingAccount         @relation("BuyTradingAccount", fields: [buyAccountId], references: [id])
+  sellAccount           TradingAccount         @relation("SellTradingAccount", fields: [sellAccountId], references: [id])
+  security              Security               @relation(fields: [securityId], references: [id])
+  tradeFees             TradeFee[]
+  marketTicks           MarketTick[]
+  settlementObligations SettlementObligation[]
+  surveillanceAlerts    SurveillanceAlert[]
+
+  @@index([securityId, tradeDate], map: "idx_trades_security_date")
+  @@index([settlementDate, status], map: "idx_trades_settlement_date")
+  @@map("trades")
+}
+
+model TradeFee {
+  id       BigInt   @id @default(autoincrement())
+  tradeId  BigInt   @map("trade_id")
+  feeType  String   @map("fee_type") @db.VarChar(100)
+  rate     Decimal? @db.Decimal(20, 10)
+  amount   Decimal  @db.Decimal(30, 10)
+  currency Currency
+
+  trade Trade @relation(fields: [tradeId], references: [id], onDelete: Cascade)
+
+  @@map("trade_fees")
+}
+
+// ============================================================
+// 10. MARKET DATA
+// ============================================================
+
+model MarketTick {
+  id         BigInt   @default(autoincrement())
+  securityId BigInt   @map("security_id")
+  tradeId    BigInt?  @map("trade_id")
+  price      Decimal  @db.Decimal(30, 10)
+  quantity   Decimal  @db.Decimal(30, 10)
+  timestamp  DateTime @db.DateTime(6)
+  sequenceNo BigInt   @map("sequence_no")
+
+  security Security @relation(fields: [securityId], references: [id])
+  trade    Trade?   @relation(fields: [tradeId], references: [id])
+
+  @@id([id, timestamp])
+  @@index([securityId, timestamp], map: "idx_market_ticks_security_time")
+  @@map("market_ticks")
+}
+
+model MarketOhlcv {
+  id         BigInt   @id @default(autoincrement())
+  securityId BigInt   @map("security_id")
+  timeframe  String   @db.VarChar(20)
+  open       Decimal  @db.Decimal(30, 10)
+  high       Decimal  @db.Decimal(30, 10)
+  low        Decimal  @db.Decimal(30, 10)
+  close      Decimal  @db.Decimal(30, 10)
+  volume     Decimal  @default(0) @db.Decimal(30, 10)
+  tradeCount BigInt   @default(0) @map("trade_count")
+  candleTime DateTime @map("candle_time") @db.DateTime(6)
+
+  security Security @relation(fields: [securityId], references: [id])
+
+  @@unique([securityId, timeframe, candleTime])
+  @@index([securityId, timeframe, candleTime], map: "idx_market_ohlcv_security_time")
+  @@map("market_ohlcv")
+}
+
+model OrderBookSnapshot {
+  id         BigInt   @id @default(autoincrement())
+  securityId BigInt   @map("security_id")
+  timestamp  DateTime @db.DateTime(6)
+  sequenceNo BigInt   @map("sequence_no")
+
+  security Security         @relation(fields: [securityId], references: [id])
+  levels   OrderBookLevel[]
+
+  @@map("order_book_snapshots")
+}
+
+model OrderBookLevel {
+  id         BigInt    @id @default(autoincrement())
+  snapshotId BigInt    @map("snapshot_id")
+  side       OrderSide
+  price      Decimal   @db.Decimal(30, 10)
+  quantity   Decimal   @db.Decimal(30, 10)
+  orderCount Int       @default(0) @map("order_count")
+  levelNo    Int       @map("level_no")
+
+  snapshot OrderBookSnapshot @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
+
+  @@map("order_book_levels")
+}
+
+// ============================================================
+// 11. CLEARING / SETTLEMENT
+// ============================================================
+
+model SettlementBatch {
+  id             BigInt           @id @default(autoincrement())
+  settlementDate DateTime         @map("settlement_date") @db.Date
+  cycle          String           @db.VarChar(50)
+  status         SettlementStatus @default(PENDING)
+  createdAt      DateTime         @default(now()) @map("created_at") @db.DateTime(6)
+
+  @@unique([settlementDate, cycle])
+  @@map("settlement_batches")
+}
+
+model SettlementObligation {
+  id         BigInt           @id @default(autoincrement())
+  tradeId    BigInt           @map("trade_id")
+  accountId  BigInt           @map("account_id")
+  securityId BigInt           @map("security_id")
+  side       OrderSide
+  quantity   Decimal          @db.Decimal(30, 10)
+  cashAmount Decimal          @map("cash_amount") @db.Decimal(30, 10)
+  currency   Currency
+  status     SettlementStatus @default(PENDING)
+
+  trade                  Trade                   @relation(fields: [tradeId], references: [id])
+  account                TradingAccount          @relation(fields: [accountId], references: [id])
+  security               Security                @relation(fields: [securityId], references: [id])
+  settlementInstructions SettlementInstruction[]
+
+  @@index([tradeId], map: "idx_settlement_obligations_trade")
+  @@map("settlement_obligations")
+}
+
+model SettlementInstruction {
+  id                BigInt           @id @default(autoincrement())
+  obligationId      BigInt           @map("obligation_id")
+  deliveryAccountId BigInt?          @map("delivery_account_id")
+  receiveAccountId  BigInt?          @map("receive_account_id")
+  deliveryQuantity  Decimal?         @map("delivery_quantity") @db.Decimal(30, 10)
+  receiveQuantity   Decimal?         @map("receive_quantity") @db.Decimal(30, 10)
+  cashAmount        Decimal?         @map("cash_amount") @db.Decimal(30, 10)
+  status            SettlementStatus @default(PENDING)
+  settledAt         DateTime?        @map("settled_at") @db.DateTime(6)
+
+  obligation         SettlementObligation @relation(fields: [obligationId], references: [id])
+  deliveryAccount    SecuritiesAccount?   @relation("DeliverySecuritiesAccount", fields: [deliveryAccountId], references: [id])
+  receiveAccount     SecuritiesAccount?   @relation("ReceiveSecuritiesAccount", fields: [receiveAccountId], references: [id])
+  settlementFailures SettlementFailure[]
+
+  @@index([status], map: "idx_settlement_instructions_status")
+  @@map("settlement_instructions")
+}
+
+model SettlementFailure {
+  id            BigInt    @id @default(autoincrement())
+  instructionId BigInt    @map("instruction_id")
+  failureCode   String?   @map("failure_code") @db.VarChar(100)
+  reason        String?   @db.Text
+  retryCount    Int       @default(0) @map("retry_count")
+  resolvedAt    DateTime? @map("resolved_at") @db.DateTime(6)
+
+  instruction SettlementInstruction @relation(fields: [instructionId], references: [id])
+
+  @@map("settlement_failures")
+}
+
+model Reconciliation {
+  id                 BigInt    @id @default(autoincrement())
+  reconciliationType String    @map("reconciliation_type") @db.VarChar(100)
+  businessDate       DateTime  @map("business_date") @db.Date
+  sourceSystem       String    @map("source_system") @db.VarChar(100)
+  targetSystem       String    @map("target_system") @db.VarChar(100)
+  expectedValue      Decimal?  @map("expected_value") @db.Decimal(30, 10)
+  actualValue        Decimal?  @map("actual_value") @db.Decimal(30, 10)
+  difference         Decimal?  @db.Decimal(30, 10)
+  status             String    @db.VarChar(50)
+  resolvedAt         DateTime? @map("resolved_at") @db.DateTime(6)
+
+  @@map("reconciliations")
+}
+
+// ============================================================
+// 12. DEPOSITORY
+// ============================================================
+
+model SecuritiesHolding {
+  id                  BigInt   @id @default(autoincrement())
+  securitiesAccountId BigInt   @map("securities_account_id")
+  securityId          BigInt   @map("security_id")
+  quantity            Decimal  @default(0) @db.Decimal(30, 10)
+  availableQuantity   Decimal  @default(0) @map("available_quantity") @db.Decimal(30, 10)
+  blockedQuantity     Decimal  @default(0) @map("blocked_quantity") @db.Decimal(30, 10)
+  pledgedQuantity     Decimal  @default(0) @map("pledged_quantity") @db.Decimal(30, 10)
+  asOfDate            DateTime @map("as_of_date") @db.Date
+
+  securitiesAccount SecuritiesAccount @relation(fields: [securitiesAccountId], references: [id])
+  security          Security          @relation(fields: [securityId], references: [id])
+
+  @@unique([securitiesAccountId, securityId, asOfDate])
+  @@index([securitiesAccountId, securityId], map: "idx_holdings_account_security")
+  @@map("securities_holdings")
+}
+
+model SecuritiesTransaction {
+  id                  BigInt        @id @default(autoincrement())
+  securitiesAccountId BigInt        @map("securities_account_id")
+  securityId          BigInt        @map("security_id")
+  transactionType     String        @map("transaction_type") @db.VarChar(100)
+  quantity            Decimal       @db.Decimal(30, 10)
+  referenceType       String?       @map("reference_type") @db.VarChar(100)
+  referenceId         BigInt?       @map("reference_id")
+  transactionDate     DateTime      @default(now()) @map("transaction_date") @db.DateTime(6)
+  status              PostingStatus @default(POSTED)
+
+  securitiesAccount SecuritiesAccount @relation(fields: [securitiesAccountId], references: [id])
+  security          Security          @relation(fields: [securityId], references: [id])
+
+  @@index([securitiesAccountId, transactionDate], map: "idx_securities_transactions_account_time")
+  @@map("securities_transactions")
+}
+
+model SecurityTransfer {
+  id            BigInt        @id @default(autoincrement())
+  fromAccountId BigInt        @map("from_account_id")
+  toAccountId   BigInt        @map("to_account_id")
+  securityId    BigInt        @map("security_id")
+  quantity      Decimal       @db.Decimal(30, 10)
+  reason        String?       @db.Text
+  status        PostingStatus @default(PENDING)
+  createdAt     DateTime      @default(now()) @map("created_at") @db.DateTime(6)
+  completedAt   DateTime?     @map("completed_at") @db.DateTime(6)
+
+  fromAccount SecuritiesAccount @relation("FromSecuritiesAccount", fields: [fromAccountId], references: [id])
+  toAccount   SecuritiesAccount @relation("ToSecuritiesAccount", fields: [toAccountId], references: [id])
+  security    Security          @relation(fields: [securityId], references: [id])
+
+  @@map("security_transfers")
+}
+
+model Pledge {
+  id                  BigInt       @id @default(autoincrement())
+  securitiesAccountId BigInt       @map("securities_account_id")
+  securityId          BigInt       @map("security_id")
+  quantity            Decimal      @db.Decimal(30, 10)
+  pledgee             String       @db.VarChar(300)
+  status              PledgeStatus @default(ACTIVE)
+  createdAt           DateTime     @default(now()) @map("created_at") @db.DateTime(6)
+  releasedAt          DateTime?    @map("released_at") @db.DateTime(6)
+
+  securitiesAccount SecuritiesAccount @relation(fields: [securitiesAccountId], references: [id])
+  security          Security          @relation(fields: [securityId], references: [id])
+
+  @@map("pledges")
+}
+
+// ============================================================
+// 13. LEDGER / DOUBLE ENTRY
+// ============================================================
+
+model LedgerAccount {
+  id          BigInt        @id @default(autoincrement())
+  accountCode String        @unique @map("account_code") @db.VarChar(100)
+  accountType String        @map("account_type") @db.VarChar(100)
+  ownerType   String?       @map("owner_type") @db.VarChar(100)
+  ownerId     BigInt?       @map("owner_id")
+  currency    Currency?
+  status      AccountStatus @default(ACTIVE)
+
+  journalLines JournalLine[]
+
+  @@map("ledger_accounts")
+}
+
+model JournalEntry {
+  id              BigInt        @id @default(autoincrement())
+  journalNo       String        @unique @map("journal_no") @db.VarChar(100)
+  transactionType String        @map("transaction_type") @db.VarChar(100)
+  referenceType   String?       @map("reference_type") @db.VarChar(100)
+  referenceId     BigInt?       @map("reference_id")
+  businessDate    DateTime      @map("business_date") @db.Date
+  postedAt        DateTime?     @map("posted_at") @db.DateTime(6)
+  status          JournalStatus @default(DRAFT)
+  createdBy       BigInt?       @map("created_by")
+  createdAt       DateTime      @default(now()) @map("created_at") @db.DateTime(6)
+
+  creator      User?         @relation("JournalEntriesCreated", fields: [createdBy], references: [id])
+  journalLines JournalLine[]
+
+  @@map("journal_entries")
+}
+
+model JournalLine {
+  id              BigInt   @id @default(autoincrement())
+  journalEntryId  BigInt   @map("journal_entry_id")
+  ledgerAccountId BigInt   @map("ledger_account_id")
+  debit           Decimal  @default(0) @db.Decimal(30, 10)
+  credit          Decimal  @default(0) @db.Decimal(30, 10)
+  currency        Currency
+
+  journalEntry  JournalEntry  @relation(fields: [journalEntryId], references: [id], onDelete: Cascade)
+  ledgerAccount LedgerAccount @relation(fields: [ledgerAccountId], references: [id])
+
+  @@map("journal_lines")
+}
+
+// ============================================================
+// 14. CORPORATE ACTIONS
+// ============================================================
+
+model CorporateAction {
+  id               BigInt                @id @default(autoincrement())
+  securityId       BigInt                @map("security_id")
+  actionType       String                @map("action_type") @db.VarChar(100)
+  announcementDate DateTime              @map("announcement_date") @db.Date
+  recordDate       DateTime?             @map("record_date") @db.Date
+  exDate           DateTime?             @map("ex_date") @db.Date
+  paymentDate      DateTime?             @map("payment_date") @db.Date
+  status           CorporateActionStatus @default(ANNOUNCED)
+
+  security     Security                     @relation(fields: [securityId], references: [id])
+  entitlements CorporateActionEntitlement[]
+
+  @@map("corporate_actions")
+}
+
+model CorporateActionEntitlement {
+  id                  BigInt   @id @default(autoincrement())
+  corporateActionId   BigInt   @map("corporate_action_id")
+  securitiesAccountId BigInt   @map("securities_account_id")
+  eligibleQuantity    Decimal  @map("eligible_quantity") @db.Decimal(30, 10)
+  entitlementQuantity Decimal? @map("entitlement_quantity") @db.Decimal(30, 10)
+  cashAmount          Decimal? @map("cash_amount") @db.Decimal(30, 10)
+  status              String   @default("PENDING") @db.VarChar(50)
+
+  corporateAction   CorporateAction          @relation(fields: [corporateActionId], references: [id], onDelete: Cascade)
+  securitiesAccount SecuritiesAccount        @relation(fields: [securitiesAccountId], references: [id])
+  payments          CorporateActionPayment[]
+
+  @@map("corporate_action_entitlements")
+}
+
+model CorporateActionPayment {
+  id            BigInt        @id @default(autoincrement())
+  entitlementId BigInt        @map("entitlement_id")
+  paymentType   String        @map("payment_type") @db.VarChar(100)
+  amount        Decimal?      @db.Decimal(30, 10)
+  currency      Currency?
+  paidAt        DateTime?     @map("paid_at") @db.DateTime(6)
+  status        PostingStatus @default(PENDING)
+
+  entitlement CorporateActionEntitlement @relation(fields: [entitlementId], references: [id])
+
+  @@map("corporate_action_payments")
+}
+
+model Dividend {
+  id               BigInt                @id @default(autoincrement())
+  securityId       BigInt                @map("security_id")
+  recordDate       DateTime              @map("record_date") @db.Date
+  exDate           DateTime?             @map("ex_date") @db.Date
+  paymentDate      DateTime?             @map("payment_date") @db.Date
+  dividendPerShare Decimal               @map("dividend_per_share") @db.Decimal(30, 10)
+  currency         Currency
+  status           CorporateActionStatus @default(ANNOUNCED)
+
+  security Security @relation(fields: [securityId], references: [id])
+
+  @@map("dividends")
+}
+
+// ============================================================
+// 15. INDEX MANAGEMENT
+// ============================================================
+
+model Index {
+  id           BigInt    @id @default(autoincrement())
+  code         String    @unique @db.VarChar(100)
+  name         String    @db.VarChar(300)
+  baseCurrency Currency? @map("base_currency")
+  status       String    @default("ACTIVE") @db.VarChar(50)
+
+  constituents IndexConstituent[]
+  indexValues  IndexValue[]
+
+  @@map("indices")
+}
+
+model IndexConstituent {
+  id            BigInt    @id @default(autoincrement())
+  indexId       BigInt    @map("index_id")
+  securityId    BigInt    @map("security_id")
+  weight        Decimal   @db.Decimal(20, 10)
+  shares        Decimal?  @db.Decimal(30, 10)
+  effectiveDate DateTime  @map("effective_date") @db.Date
+  endDate       DateTime? @map("end_date") @db.Date
+
+  index    Index    @relation(fields: [indexId], references: [id], onDelete: Cascade)
+  security Security @relation(fields: [securityId], references: [id])
+
+  @@map("index_constituents")
+}
+
+model IndexValue {
+  id            BigInt   @id @default(autoincrement())
+  indexId       BigInt   @map("index_id")
+  value         Decimal  @db.Decimal(30, 10)
+  change        Decimal? @db.Decimal(30, 10)
+  changePercent Decimal? @map("change_percent") @db.Decimal(30, 10)
+  timestamp     DateTime @db.DateTime(6)
+
+  index Index @relation(fields: [indexId], references: [id])
+
+  @@unique([indexId, timestamp])
+  @@map("index_values")
+}
+
+// ============================================================
+// 16. FOREIGN INVESTOR
+// ============================================================
+
+model ForeignInvestor {
+  id               BigInt  @id @default(autoincrement())
+  investorId       BigInt  @unique @map("investor_id")
+  country          String  @db.VarChar(100)
+  investorCategory String? @map("investor_category") @db.VarChar(100)
+  licenseNo        String? @map("license_no") @db.VarChar(100)
+  status           String  @default("ACTIVE") @db.VarChar(50)
+
+  investor         Investor          @relation(fields: [investorId], references: [id], onDelete: Cascade)
+  foreignPositions ForeignPosition[]
+
+  @@map("foreign_investors")
+}
+
+model ForeignLimit {
+  id            BigInt    @id @default(autoincrement())
+  securityId    BigInt    @map("security_id")
+  country       String?   @db.VarChar(100)
+  maxPercentage Decimal?  @map("max_percentage") @db.Decimal(20, 10)
+  maxQuantity   Decimal?  @map("max_quantity") @db.Decimal(30, 10)
+  effectiveFrom DateTime  @map("effective_from") @db.Date
+  effectiveTo   DateTime? @map("effective_to") @db.Date
+
+  security Security @relation(fields: [securityId], references: [id])
+
+  @@map("foreign_limits")
+}
+
+model ForeignPosition {
+  id                BigInt   @id @default(autoincrement())
+  foreignInvestorId BigInt   @map("foreign_investor_id")
+  securityId        BigInt   @map("security_id")
+  quantity          Decimal  @db.Decimal(30, 10)
+  asOfDate          DateTime @map("as_of_date") @db.Date
+
+  foreignInvestor ForeignInvestor @relation(fields: [foreignInvestorId], references: [id])
+  security        Security        @relation(fields: [securityId], references: [id])
+
+  @@unique([foreignInvestorId, securityId, asOfDate])
+  @@map("foreign_positions")
+}
+
+// ============================================================
+// 17. DISCLOSURE
+// ============================================================
+
+model Disclosure {
+  id               BigInt           @id @default(autoincrement())
+  issuerId         BigInt           @map("issuer_id")
+  securityId       BigInt?          @map("security_id")
+  disclosureType   String           @map("disclosure_type") @db.VarChar(100)
+  title            String           @db.VarChar(500)
+  content          String?          @db.Text
+  announcementDate DateTime         @map("announcement_date") @db.Date
+  status           DisclosureStatus @default(DRAFT)
+  publishedAt      DateTime?        @map("published_at") @db.DateTime(6)
+  createdBy        BigInt?          @map("created_by")
+  createdAt        DateTime         @default(now()) @map("created_at") @db.DateTime(6)
+
+  issuer              Issuer               @relation(fields: [issuerId], references: [id])
+  security            Security?            @relation(fields: [securityId], references: [id])
+  creator             User?                @relation(fields: [createdBy], references: [id])
+  disclosureDocuments DisclosureDocument[]
+
+  @@map("disclosures")
+}
+
+model DisclosureDocument {
+  disclosureId BigInt @map("disclosure_id")
+  documentId   BigInt @map("document_id")
+
+  disclosure Disclosure @relation(fields: [disclosureId], references: [id], onDelete: Cascade)
+  document   Document   @relation(fields: [documentId], references: [id])
+
+  @@id([disclosureId, documentId])
+  @@map("disclosure_documents")
+}
+
+// ============================================================
+// 18. MARKET SURVEILLANCE
+// ============================================================
+
+model SurveillanceRule {
+  id         BigInt   @id @default(autoincrement())
+  ruleCode   String   @unique @map("rule_code") @db.VarChar(100)
+  name       String   @db.VarChar(300)
+  ruleType   String   @map("rule_type") @db.VarChar(100)
+  parameters Json
+  threshold  Decimal? @db.Decimal(30, 10)
+  status     String   @default("ACTIVE") @db.VarChar(50)
+
+  alerts SurveillanceAlert[]
+
+  @@map("surveillance_rules")
+}
+
+model SurveillanceAlert {
+  id          BigInt        @id @default(autoincrement())
+  ruleId      BigInt        @map("rule_id")
+  securityId  BigInt?       @map("security_id")
+  accountId   BigInt?       @map("account_id")
+  tradeId     BigInt?       @map("trade_id")
+  severity    AlertSeverity
+  score       Decimal?      @db.Decimal(30, 10)
+  detectedAt  DateTime      @default(now()) @map("detected_at") @db.DateTime(6)
+  status      AlertStatus   @default(OPEN)
+  description String?       @db.Text
+
+  rule              SurveillanceRule   @relation(fields: [ruleId], references: [id])
+  security          Security?          @relation(fields: [securityId], references: [id])
+  account           TradingAccount?    @relation(fields: [accountId], references: [id])
+  trade             Trade?             @relation(fields: [tradeId], references: [id])
+  surveillanceCases SurveillanceCase[]
+
+  @@index([status, severity], map: "idx_surveillance_alerts_status")
+  @@index([securityId, detectedAt], map: "idx_surveillance_alerts_security")
+  @@map("surveillance_alerts")
+}
+
+model SurveillanceCase {
+  id         BigInt        @id @default(autoincrement())
+  caseNo     String        @unique @map("case_no") @db.VarChar(100)
+  alertId    BigInt?       @map("alert_id")
+  caseType   String        @map("case_type") @db.VarChar(100)
+  priority   AlertSeverity
+  assignedTo BigInt?       @map("assigned_to")
+  status     CaseStatus    @default(OPEN)
+  openedAt   DateTime      @default(now()) @map("opened_at") @db.DateTime(6)
+  closedAt   DateTime?     @map("closed_at") @db.DateTime(6)
+
+  alert       SurveillanceAlert? @relation(fields: [alertId], references: [id])
+  assignee    User?              @relation(fields: [assignedTo], references: [id])
+  caseActions CaseAction[]
+
+  @@map("surveillance_cases")
+}
+
+model CaseAction {
+  id        BigInt   @id @default(autoincrement())
+  caseId    BigInt   @map("case_id")
+  userId    BigInt   @map("user_id")
+  action    String   @db.VarChar(200)
+  comment   String?  @db.Text
+  createdAt DateTime @default(now()) @map("created_at") @db.DateTime(6)
+
+  case SurveillanceCase @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  user User             @relation(fields: [userId], references: [id])
+
+  @@map("case_actions")
+}
+
+// ============================================================
+// 19. AUDIT / SYSTEM
+// ============================================================
+
+model AuditLog {
+  id         BigInt   @id @default(autoincrement())
+  userId     BigInt?  @map("user_id")
+  action     String   @db.VarChar(100)
+  entityType String   @map("entity_type") @db.VarChar(100)
+  entityId   String?  @map("entity_id") @db.VarChar(100)
+  oldValue   Json?    @map("old_value")
+  newValue   Json?    @map("new_value")
+  ipAddress  String?  @map("ip_address") @db.VarChar(45)
+  userAgent  String?  @map("user_agent") @db.Text
+  requestId  String?  @map("request_id") @db.VarChar(100)
+  createdAt  DateTime @default(now()) @map("created_at") @db.DateTime(6)
+
+  user User? @relation(fields: [userId], references: [id])
+
+  @@index([entityType, entityId, createdAt], map: "idx_audit_logs_entity")
+  @@index([userId, createdAt], map: "idx_audit_logs_user")
+  @@map("audit_logs")
+}
+
+model ApiIdempotencyKey {
+  id             BigInt    @id @default(autoincrement())
+  idempotencyKey String    @unique @map("idempotency_key") @db.VarChar(255)
+  endpoint       String    @db.VarChar(500)
+  requestHash    String?   @map("request_hash") @db.VarChar(255)
+  responseStatus Int?      @map("response_status")
+  responseBody   Json?     @map("response_body")
+  createdAt      DateTime  @default(now()) @map("created_at") @db.DateTime(6)
+  expiresAt      DateTime? @map("expires_at") @db.DateTime(6)
+
+  @@map("api_idempotency_keys")
+}
+
+model SystemEvent {
+  id            BigInt    @id @default(autoincrement())
+  eventId       String    @unique @map("event_id") @db.Char(36)
+  eventType     String    @map("event_type") @db.VarChar(200)
+  aggregateType String?   @map("aggregate_type") @db.VarChar(100)
+  aggregateId   String?   @map("aggregate_id") @db.VarChar(100)
+  payload       Json
+  occurredAt    DateTime  @default(now()) @map("occurred_at") @db.DateTime(6)
+  publishedAt   DateTime? @map("published_at") @db.DateTime(6)
+
+  @@index([eventType, occurredAt], map: "idx_system_events_type_time")
+  @@map("system_events")
+}
