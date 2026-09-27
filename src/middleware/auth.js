@@ -1,56 +1,47 @@
 import { VerifyToken } from "../lib/verifyToken.js";
 import { EMessage } from "../service/message.js";
 import { resError } from "../service/response.js";
-import { FindOneUser } from "../service/service.js";
+import { can } from "../config/permissions.js";
 
+const readBearerToken = (req) => {
+    const header = req.headers.authorization || "";
+    const [scheme, token] = header.split(" ");
+    return scheme === "Bearer" && token ? token : null;
+};
+
+/**
+ * ກວດ token → ແນບ req.user = { user_id, username, role, ... } (ບໍ່ມີ password)
+ */
 export const auth = async (req, res, next) => {
+    const token = readBearerToken(req);
+    if (!token) return resError(res, 401, EMessage.Unauthorized, "Missing Bearer token");
+
+    let user;
     try {
-        const authorization = req.headers.authorization;
-        if (!authorization) {
-            return resError(res, 401, EMessage.Uauthorization)
-        }
-       
-        const token = authorization.replace("Bearer ", "");
-        if (!token) return resError(res, 401, EMessage.Uaunthorization)
-        const verify = await VerifyToken(token); // ສ້າງໃນ service
-        req.user = verify.user_id;
-        next();
+        user = await VerifyToken(token);
     } catch (error) {
-        return resError(res, 500, EMessage.ErrorServer, error);
+        return resError(res, 401, EMessage.Unauthorized, error?.name || String(error));
     }
-}
 
+    if (!user.active) return resError(res, 403, EMessage.AccountDisabled);
 
-export const authAdmin = async (req, res, next) => {
-    try {
-        const admin = req.user;
-        if (!admin) {
-            return resError(res, 401, EMessage.Uauthorization)
-        }
-        const user = await FindOneUser(admin) 
-        if (user.role !== Role.admin || user.role !== Role.superadmin) {
-            return resError(res, 401, EMessage.Uauthorization)
-        }
-        next();
-    } catch (error) {
-        return resError(res, 500, EMessage.ErrorServer, error);
+    const { password, ...safeUser } = user;
+    req.user = safeUser;
+    return next();
+};
+
+/**
+ * ກວດສິດຕາມຕາຕະລາງ PERMISSIONS: authorize("product", "create")
+ * ຕ້ອງໃຊ້ຕໍ່ຈາກ auth ສະເໝີ
+ */
+export const authorize = (resource, action) => (req, res, next) => {
+    const role = req.user?.role;
+    if (!role) return resError(res, 401, EMessage.Unauthorized);
+    if (!can(role, resource, action)) {
+        return resError(res, 403, EMessage.Forbidden, `role "${role}" ບໍ່ມີສິດ ${action} ${resource}`);
     }
-}
+    return next();
+};
 
-export const authSuperAdmin = async (req, res, next) => {
-    try {
-        const superadmin = req.user;
-        if (!superadmin) {
-            return resError(res, 401, EMessage.Uaunthorization)
-        }
-        const user = await FindOneUser(superadmin) // ສ້າງໃນ serivce
-        if (user.role !== Role.superadmin) {
-            return resError(res, 401, EMessage.Uaunthorization)
-        }
-       
-        next();
-    } catch (error) {
-        return resError(res, 500, EMessage.ErrorServer, error);
-    }
-}
-
+/** ໃຊ້ໃນ router: guard(Resource.product, Action.read) → [auth, authorize(...)] */
+export const guard = (resource, action) => [auth, authorize(resource, action)];

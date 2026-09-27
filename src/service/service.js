@@ -1,16 +1,9 @@
+import prisma from "../config/prisma.js";
 import { EMessage } from "./message.js";
 
 export const FindOneUser = async (user_id) => {
-    return new Promise(async (resolve, reject) => {
-        try {
-
-            const data = await prisma.user.findFirst({ where: { user_id: user_id } });
-            if (!data) {
-                return reject(EMessage.NotFound);
-            }
-            return resolve(data)
-        } catch (error) {
-            return reject(error)
-        }
-    })
-}
+    if (!user_id) throw new Error(EMessage.NotFound);
+    const data = await prisma.user.findUnique({ where: { user_id } });
+    if (!data) throw new Error(EMessage.NotFound);
+    return data;
+};

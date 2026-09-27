@@ -1,7 +1,7 @@
 import express from "express";
 import cors from "cors";
 import bodyParser from "body-parser";
-import router from "./router/user/index.js";
+import router from "./router/index.js";
 import fileUpload  from "express-fileupload";
 const app = express()
 const port = 3000 || 5000

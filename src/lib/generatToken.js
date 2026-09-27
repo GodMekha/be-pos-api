@@ -1,19 +1,11 @@
 import { SECREAT_KEY, SECREAT_KEY_REFRESH } from "../config/globalKey.js";
 import jwt from "jsonwebtoken";
-export const GenerateToken = (data) => {
-    return new Promise(async (resolve, reject) => {
-        try {
-            const payload = {
-                id: data
-            }
-            const payload_refresh = {
-                id: payload.id
-            }
-            const token = jwt.sign(payload, SECREAT_KEY, { expiresIn: "1h" });
-            const refreshToken = jwt.sign(payload_refresh, SECREAT_KEY_REFRESH, { expiresIn: "3h" });
-            return resolve({ token, refreshToken });
-        } catch (error) {
-            return reject(error);
-        }
-    })
-}
+
+/** ສ້າງ access token (1 ຊົ່ວໂມງ) + refresh token (3 ຊົ່ວໂມງ) ຈາກ user_id */
+export const GenerateToken = async (userId) => {
+    if (!userId) throw new Error("GenerateToken: userId is required");
+    const payload = { id: userId };
+    const token = jwt.sign(payload, SECREAT_KEY, { expiresIn: "1h" });
+    const refreshToken = jwt.sign(payload, SECREAT_KEY_REFRESH, { expiresIn: "3h" });
+    return { token, refreshToken };
+};

@@ -3,33 +3,14 @@ import { EMessage } from "../service/message.js";
 import { SECREAT_KEY, SECREAT_KEY_REFRESH } from "../config/globalKey.js";
 import prisma from "../config/prisma.js";
 
-export const VerifyToken = async (token) => {
-    return new Promise(async (resolve, reject) => {
-        try {
-            jwt.verify(token, SECREAT_KEY, async (err, decode) => {
-                if (err) return reject(err);
+const verifyWith = async (token, secret) => {
+    const decoded = jwt.verify(token, secret); // throw ຖ້າ token ຜິດ/ໝົດອາຍຸ
+    // ກັນ payload ທີ່ບໍ່ມີ id: prisma ຈະຕີຄວາມ where { user_id: undefined } ເປັນ "ບໍ່ກອງ" ແລ້ວສົ່ງ user ຄົນທຳອິດ
+    if (!decoded?.id) throw new jwt.JsonWebTokenError("invalid payload");
+    const user = await prisma.user.findUnique({ where: { user_id: decoded.id } });
+    if (!user) throw new Error(EMessage.NotFound);
+    return user;
+};
 
-                const data = await prisma.user.findFirst({ where: { user_id: decode.id } });
-                if (!data) return reject(EMessage.NotFound);
-                return resolve(data);
-            })
-        } catch (error) {
-            return reject(error)
-        }
-    })
-}
-export const VerifyRefreshToken = async (refreshToken) => {
-    return new Promise(async (resolve, reject) => {
-        try {
-            jwt.verify(refreshToken, SECREAT_KEY_REFRESH, async (err, decode) => {
-                if (err) return reject(err);
-
-                const data = await prisma.user.findFirst({ where: { user_id: decode.id } });
-                if (!data) return reject(EMessage.NotFound);
-                return resolve(data);
-            })
-        } catch (error) {
-            return reject(error)
-        }
-    })
-}
+export const VerifyToken = (token) => verifyWith(token, SECREAT_KEY);
+export const VerifyRefreshToken = (refreshToken) => verifyWith(refreshToken, SECREAT_KEY_REFRESH);

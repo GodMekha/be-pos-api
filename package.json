@@ -7,8 +7,8 @@
   "type": "module",
   "main": "server.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "start": "nodemon src/server"
+    "start": "nodemon src/server",
+    "create:super-admin": "node scripts/create-super-admin.js"
   },
   "dependencies": {
     "@prisma/adapter-mariadb": "^7.8.0",
