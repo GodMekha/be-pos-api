@@ -5,10 +5,10 @@ import router from "./router/index.js";
 import fileUpload  from "express-fileupload";
 const app = express()
 const port = 3000 || 5000
-import "./config/db_mysql.js"
+// import "./config/db_mysql.js"
 // app.use(cors());
 app.use(cors({
-  origin: "http://localhost:8000", // URL ຂອງ Frontend
+  origin: "https://be-pos-bpks.onrender.com", // URL ຂອງ Frontend
   credentials: true
 }));
 app.use(fileUpload());
