@@ -8,7 +8,7 @@ const port = 3000 || 5000
 // import "./config/db_mysql.js"
 // app.use(cors());
 app.use(cors({
-  origin: "https://be-pos-bpks.onrender.com", // URL ຂອງ Frontend
+  origin: "https://be-pos-ie2m.onrender.com", // URL ຂອງ Frontend
   credentials: true
 }));
 app.use(fileUpload());
